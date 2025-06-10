@@ -6,9 +6,16 @@ require("dotenv").config()
 const nodemailer = require("nodemailer")
 const path = require("path")
 const fs = require("fs")
+const mongoose = require("mongoose")
+const SendedMail = require("./models/sendedmailModel")
 
 const app = express()
 const PORT = process.env.PORT || 3000
+
+// MongoDB connection
+mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/sheetmail")
+  .then(() => console.log("Connected to MongoDB"))
+  .catch((err) => console.error("MongoDB connection error:", err))
 
 // Middleware
 app.use(cors())
@@ -601,6 +608,17 @@ app.post(["/send-emails/:fileId", "/send-emails/:fileId/:sheetName"], async (req
           subject,
           html: personalizedBody,
         })
+
+        // Save email log to MongoDB
+        const mailLog = new SendedMail({
+          recipientEmail: contact.email,
+          recipientName: contact.name,
+          certificateDetails: contact.certificateLink,
+          sheetName: targetSheet,
+          fileName: fileData.originalName
+        })
+        await mailLog.save()
+
         sent++
       } catch (err) {
         failed++
@@ -649,6 +667,70 @@ app.delete("/file/:fileId", (req, res) => {
   uploadedFiles.delete(fileId)
   res.json({ message: "File deleted successfully" })
 })
+
+// Get email sending logs with filters
+app.get("/email-logs", async (req, res) => {
+  try {
+    const { 
+      timeFilter,
+      sheetName, 
+      fileName,
+      search 
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+
+    // Time-based filter
+    if (timeFilter) {
+      const now = new Date();
+      switch (timeFilter) {
+        case 'lastHour':
+          filter.sentAt = { $gte: new Date(now - 60 * 60 * 1000) };
+          break;
+        case 'last24Hours':
+          filter.sentAt = { $gte: new Date(now - 24 * 60 * 60 * 1000) };
+          break;
+        case 'lastWeek':
+          filter.sentAt = { $gte: new Date(now - 7 * 24 * 60 * 60 * 1000) };
+          break;
+        case 'lastMonth':
+          filter.sentAt = { $gte: new Date(now - 30 * 24 * 60 * 60 * 1000) };
+          break;
+        case 'last3Months':
+          filter.sentAt = { $gte: new Date(now - 90 * 24 * 60 * 60 * 1000) };
+          break;
+        case 'lastYear':
+          filter.sentAt = { $gte: new Date(now - 365 * 24 * 60 * 60 * 1000) };
+          break;
+      }
+    }
+
+    // Sheet name filter
+    if (sheetName) {
+      filter.sheetName = { $regex: sheetName, $options: 'i' };
+    }
+
+    // File name filter
+    if (fileName) {
+      filter.fileName = { $regex: fileName, $options: 'i' };
+    }
+
+    // Search in recipient name or email
+    if (search) {
+      filter.$or = [
+        { recipientName: { $regex: search, $options: 'i' } },
+        { recipientEmail: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const logs = await SendedMail.find(filter).sort({ sentAt: -1 });
+    res.json(logs);
+  } catch (error) {
+    console.error("Error fetching email logs:", error);
+    res.status(500).json({ error: "Failed to fetch email logs", message: error.message });
+  }
+});
 
 // Error handling middleware
 app.use((error, req, res, next) => {

@@ -17,6 +17,7 @@ import {
   Link,
   Trash2,
   File,
+  History,
 } from "lucide-react"
 import EmailEditor from "react-email-editor"
 
@@ -46,6 +47,14 @@ const XlsxUploadFrontend = () => {
   const [_editorLoaded, setEditorLoaded] = useState(false)
   const [templates, setTemplates] = useState({})
   const fileInputRef = useRef(null)
+  const [emailLogs, setEmailLogs] = useState([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
+  const [logFilters, setLogFilters] = useState({
+    timeFilter: '',
+    sheetName: '',
+    fileName: '',
+    search: ''
+  });
 
   // Toggle dark mode
   const toggleDarkMode = () => {
@@ -674,6 +683,30 @@ const XlsxUploadFrontend = () => {
     }
   }
 
+  // Fetch email logs with filters
+  const fetchEmailLogs = useCallback(async () => {
+    setLoadingLogs(true);
+    try {
+      const queryParams = new URLSearchParams();
+      Object.entries(logFilters).forEach(([key, value]) => {
+        if (value) queryParams.append(key, value);
+      });
+
+      const result = await apiCall(`/email-logs?${queryParams.toString()}`);
+      setEmailLogs(result);
+    } catch (err) {
+      console.error("Failed to fetch email logs:", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, [apiCall, logFilters]);
+
+  // Handle filter changes
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setLogFilters(prev => ({ ...prev, [name]: value }));
+  };
+
   return (
     <div
       className={`min-h-screen w-full transition-colors duration-300 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-gradient-to-br from-blue-50 to-indigo-100 text-gray-900"}`}
@@ -769,6 +802,7 @@ const XlsxUploadFrontend = () => {
               { id: "sheet", label: "Sheet Data", icon: FileSpreadsheet },
               { id: "search", label: "Search", icon: Search },
               { id: "sendmail", label: "Send Email", icon: Mail },
+              { id: "logs", label: "Email Logs", icon: History },
             ].map((tab) => {
               const Icon = tab.icon
               return (
@@ -1428,6 +1462,162 @@ const XlsxUploadFrontend = () => {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Email Logs Tab */}
+            {activeTab === "logs" && (
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className={`text-xl font-bold ${darkMode ? "text-gray-100" : "text-gray-900"}`}>
+                    Email Sending Logs
+                  </h2>
+                  <button
+                    onClick={fetchEmailLogs}
+                    disabled={loadingLogs}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                      darkMode
+                        ? "bg-purple-600 hover:bg-purple-700 text-white"
+                        : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                    }`}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loadingLogs ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {/* Filters */}
+                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 rounded-lg ${
+                  darkMode ? "bg-gray-800" : "bg-gray-100"
+                }`}>
+                  {/* Search */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                      Search
+                    </label>
+                    <input
+                      type="text"
+                      name="search"
+                      value={logFilters.search}
+                      onChange={handleFilterChange}
+                      placeholder="Search by name or email..."
+                      className={`w-full px-3 py-2 rounded-md ${
+                        darkMode ? "bg-gray-700 text-white border-gray-600" : "bg-white border-gray-300"
+                      }`}
+                    />
+                  </div>
+
+                  {/* Time Filter */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                      Time Period
+                    </label>
+                    <select
+                      name="timeFilter"
+                      value={logFilters.timeFilter}
+                      onChange={handleFilterChange}
+                      className={`w-full px-3 py-2 rounded-md ${
+                        darkMode ? "bg-gray-700 text-white border-gray-600" : "bg-white border-gray-300"
+                      }`}
+                    >
+                      <option value="">All Time</option>
+                      <option value="lastHour">Last Hour</option>
+                      <option value="last24Hours">Last 24 Hours</option>
+                      <option value="lastWeek">Last Week</option>
+                      <option value="lastMonth">Last Month</option>
+                      <option value="last3Months">Last 3 Months</option>
+                      <option value="lastYear">Last Year</option>
+                    </select>
+                  </div>
+
+                  {/* Sheet Name */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                      Sheet Name
+                    </label>
+                    <input
+                      type="text"
+                      name="sheetName"
+                      value={logFilters.sheetName}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by sheet name..."
+                      className={`w-full px-3 py-2 rounded-md ${
+                        darkMode ? "bg-gray-700 text-white border-gray-600" : "bg-white border-gray-300"
+                      }`}
+                    />
+                  </div>
+
+                  {/* File Name */}
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                      File Name
+                    </label>
+                    <input
+                      type="text"
+                      name="fileName"
+                      value={logFilters.fileName}
+                      onChange={handleFilterChange}
+                      placeholder="Filter by file name..."
+                      className={`w-full px-3 py-2 rounded-md ${
+                        darkMode ? "bg-gray-700 text-white border-gray-600" : "bg-white border-gray-300"
+                      }`}
+                    />
+                  </div>
+
+                  {/* Apply Filters Button */}
+                  <div className="flex items-end">
+                    <button
+                      onClick={fetchEmailLogs}
+                      className={`w-full px-4 py-2 rounded-md ${
+                        darkMode
+                          ? "bg-purple-600 hover:bg-purple-700 text-white"
+                          : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                      }`}
+                    >
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+
+                {loadingLogs ? (
+                  <p className={darkMode ? "text-gray-400" : "text-gray-500"}>Loading logs...</p>
+                ) : emailLogs.length === 0 ? (
+                  <p className={darkMode ? "text-gray-400" : "text-gray-500"}>No email logs found.</p>
+                ) : (
+                  <div className="grid gap-4">
+                    {emailLogs.map((log) => (
+                      <div
+                        key={log._id}
+                        className={`p-4 rounded-lg border ${
+                          darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className={`font-medium ${darkMode ? "text-gray-100" : "text-gray-900"}`}>
+                              {log.recipientName}
+                            </h3>
+                            <p className={`text-sm ${darkMode ? "text-purple-300" : "text-gray-600"}`}>
+                              {log.recipientEmail}
+                            </p>
+                            <p className={`text-sm mt-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                              Certificate: {log.certificateDetails}
+                            </p>
+                            <p className={`text-sm mt-1 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                              File: {log.fileName}
+                            </p>
+                            <p className={`text-sm mt-1 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                              Sheet: {log.sheetName}
+                            </p>
+                          </div>
+                          <div className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                            {new Date(log.sentAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
