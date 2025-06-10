@@ -1,0 +1,11 @@
+# ---- base image ----
+    FROM node:20-alpine
+
+    # ---- app ----
+    WORKDIR /app
+    COPY package*.json ./
+    RUN npm ci --production          # install only prod deps
+    COPY . .
+    ENV NODE_ENV=production
+    EXPOSE 3000
+    CMD ["node", "index.js"]
